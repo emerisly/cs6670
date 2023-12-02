@@ -8,14 +8,14 @@ def find_top_K_vectors(clusters_of_images, query_vector, K):
     This function takes in three inputs: clusters_of_images, query_vector, and K. It finds the mean vector of each cluster and gets the top K clusters based on cosine similarity. Then, from each of the top K clusters, it finds the vector in the cluster that is closest to the query vector. Finally, it returns a numpy array of those top K vectors.
 
     Args:
-        clusters_of_images (numpy.ndarray): A numpy array of dimensions (number_of_clusters, batch, channels, height, width).
-        query_vector (numpy.ndarray): A numpy array of size (channels, height, width).
+        clusters_of_images (numpy.ndarray): A numpy array of dimensions (number_of_clusters, batch, embedding_size).
+        query_vector (numpy.ndarray): A numpy array of size embedding_size.
         K (int): An integer representing the number of top clusters to return.
 
     Returns:
-        numpy.ndarray: A numpy array of dimensions (K, channels, height, width) containing the top K vectors.
+        numpy.ndarray: A numpy array of dimensions (K, 512) containing the top K vectors.
     """
-    num_clusters, batch_size, channels, rows, cols = np.shape(clusters_of_images)
+    num_clusters, batch_size, embedding_size = np.shape(clusters_of_images)
     # Convert numpy arrays to PyTorch tensors
     clusters_of_images = torch.from_numpy(clusters_of_images)
     query_vector = torch.from_numpy(query_vector)
@@ -26,7 +26,7 @@ def find_top_K_vectors(clusters_of_images, query_vector, K):
     )  # Calculate the mean for each cluster
     query_vector_flat = query_vector.view(1, -1)  # Flatten the query vector
     cos_sim = torch.nn.functional.cosine_similarity(
-        cluster_means.view(-1, rows * cols * channels), query_vector_flat, dim=1
+        cluster_means.view(-1, embedding_size), query_vector_flat, dim=1
     )
 
     # Get the indices of the top K clusters based on cosine similarity
@@ -43,7 +43,7 @@ def find_top_K_vectors(clusters_of_images, query_vector, K):
 
         # Calculate cosine similarity between the cluster vectors and the query vector
         cos_sim_cluster = torch.nn.functional.cosine_similarity(
-            clusters_of_images[cluster_index].view(-1, rows * cols * channels),
+            clusters_of_images[cluster_index].view(-1, embedding_size),
             query_vector_flat,
             dim=1,
         )
@@ -52,15 +52,14 @@ def find_top_K_vectors(clusters_of_images, query_vector, K):
         closest_vector_index = torch.argmax(cos_sim_cluster)
         top_k_vectors.append(
             clusters_of_images[cluster_index]
-            .view(-1, rows * cols * channels)[closest_vector_index]
+            .view(-1, embedding_size)[closest_vector_index]
             .numpy()
         )
 
     # Reshape the top K vectors to their original shape
-    top_k_vectors = np.array(top_k_vectors).reshape(K, channels, rows, cols)
+    top_k_vectors = np.array(top_k_vectors).reshape(K, embedding_size)
 
     return top_k_vectors
-
 
 # top K clusters and C vectors within those clusters
 def find_top_K_C_vectors(clusters_of_images, query_vector, K, C=1):
@@ -68,15 +67,15 @@ def find_top_K_C_vectors(clusters_of_images, query_vector, K, C=1):
     This function finds the top K clusters and, for each of the top K clusters, returns the top C vectors based on cosine similarity.
 
     Args:
-        clusters_of_images (numpy.ndarray): A numpy array of dimensions (number_of_clusters, batch, channels, height, width).
-        query_vector (numpy.ndarray): A numpy array of size (channels, height, width).
+        clusters_of_images (numpy.ndarray): A numpy array of dimensions (number_of_clusters, batch, embedding_size).
+        query_vector (numpy.ndarray): A numpy array of size (embedding_size).
         K (int): An integer representing the number of top clusters to return.
         C (int, optional): An integer representing the number of top vectors to return within each of the top K clusters. Default is 1.
 
     Returns:
-        numpy.ndarray: A numpy array of dimensions (K, C, channels, height, width) containing the top K clusters, each with the top C vectors.
+        numpy.ndarray: A numpy array of dimensions (K, C, embedding_size) containing the top K clusters, each with the top C vectors.
     """
-    num_clusters, batch_size, channels, rows, cols = np.shape(clusters_of_images)
+    num_clusters, batch_size, embedding_size = np.shape(clusters_of_images)
     # Convert numpy arrays to PyTorch tensors
     clusters_of_images = torch.from_numpy(clusters_of_images)
     query_vector = torch.from_numpy(query_vector)
@@ -87,7 +86,7 @@ def find_top_K_C_vectors(clusters_of_images, query_vector, K, C=1):
     )  # Calculate the mean for each cluster
     query_vector_flat = query_vector.view(1, -1)  # Flatten the query vector
     cos_sim = torch.nn.functional.cosine_similarity(
-        cluster_means.view(-1, channels * rows * cols), query_vector_flat, dim=1
+        cluster_means.view(-1, embedding_size), query_vector_flat, dim=1
     )
 
     # Get the indices of the top K clusters based on cosine similarity
@@ -99,7 +98,7 @@ def find_top_K_C_vectors(clusters_of_images, query_vector, K, C=1):
 
         # Calculate cosine similarity between the cluster vectors and the query vector
         cos_sim_cluster = torch.nn.functional.cosine_similarity(
-            clusters_of_images[cluster_index].view(-1, channels * rows * cols),
+            clusters_of_images[cluster_index].view(-1, embedding_size),
             query_vector_flat,
             dim=1,
         )
@@ -111,14 +110,15 @@ def find_top_K_C_vectors(clusters_of_images, query_vector, K, C=1):
         top_C_vectors = (
             clusters_of_images[cluster_index][top_C_indices]
             .numpy()
-            .reshape(C, channels, rows, cols)
+            .reshape(C, embedding_size)
         )
         top_K_C_vectors.append(top_C_vectors)
 
     # Reshape the top K C vectors to their original shape
-    top_K_C_vectors = np.array(top_K_C_vectors).reshape(K * C, channels, rows, cols)
+    top_K_C_vectors = np.array(top_K_C_vectors).reshape(K * C, embedding_size)
 
     return top_K_C_vectors
+
 
 
 ## SAMPLE CODE TO TEST
@@ -130,10 +130,10 @@ def calculate_and_print_cosine_similarity(
     Calculate and print cosine similarity between the top K vectors and the query vector, as well as all input vectors and the query vector.
 
     Args:
-        clusters_of_images (numpy.ndarray): A numpy array of dimensions (number_of_clusters, batch, channels, height, width).
-        query_vector (numpy.ndarray): A numpy array of size (channels, height, width).
+        clusters_of_images (numpy.ndarray): A numpy array of dimensions (number_of_clusters, batch, embedding_size).
+        query_vector (numpy.ndarray): A numpy array of size embedding_size.
         K (int): An integer representing the number of top clusters to return.
-        top_k_vectors (numpy.ndarray): A numpy array of dimensions (K, channels, height, width) containing the top K vectors.
+        top_k_vectors (numpy.ndarray): A numpy array of dimensions (K, embedding_size) containing the top K vectors.
 
     Returns:
         None
@@ -177,13 +177,14 @@ def testing():
     # Generate random data
     number_of_clusters = 10
     batch = 10
-    channels = 5
-    height = 48
-    width = 64
+    # channels = 5
+    # height = 48
+    # width = 64
+    embedding_size = 512
     clusters_of_images = np.random.rand(
-        number_of_clusters, batch, channels, height, width
+        number_of_clusters, batch, embedding_size
     )
-    query_vector = np.random.rand(channels, height, width)
+    query_vector = np.random.rand(embedding_size)
     K = 5
 
     print("TOP K RETRIEVAL")
