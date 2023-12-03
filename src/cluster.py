@@ -3,13 +3,22 @@ import numpy as np
 from annoy import AnnoyIndex
 from scipy.cluster.hierarchy import linkage, fcluster
 import concurrent.futures
+import os
+import shutil
 
 
 def load_embeddings():
-    # load the embeddings from ./data/embeddings.npy
-    embeddings = torch.load("./data/embeddings.npy")
-    return embeddings
+    # load the embeddings from ../data/images.npy
+    save_dir = "../data/"
+    images_load = np.load(save_dir+"images.npy")
+    image_np = np.asarray(images_load)
+    image_tensors_load = torch.from_numpy(image_np)
+    image_tensors_load = torch.squeeze(image_tensors_load)
+    image_tensors_load = image_tensors_load.type(torch.float16)
+    print(type(image_tensors_load))
+    print(image_tensors_load.size())
 
+    return image_tensors_load
 
 def compute_distances_for_range(start, end, all_embeddings, annoy_index):
     distances = []
@@ -68,27 +77,93 @@ def get_clusters(embeddings, assignments):
     # embeddings in cluster i
     clusters = [np.array([]) for _ in range(max(assignments))]
     means = [0 for _ in range(max(assignments))]
+    index_assignments = [np.array([]) for _ in range(max(assignments))]
+
     for i, assignment in enumerate(assignments):
+        # print(i, assignment)
         clusters[assignment - 1] = np.append(clusters[assignment - 1], embeddings[i])
         number_of_entries = len(clusters[assignment - 1])
         means[assignment - 1] += (
             means[assignment - 1] * (number_of_entries - 1) + embeddings[i]
         ) / number_of_entries
-    return clusters, means
+        index_assignments[assignment - 1] = np.append(index_assignments[assignment - 1], i)
+    return clusters, means, index_assignments
 
+def save_index_assignments(index_assignments):
+    save_dir = "../data/cluster_indexes"
+    
+    # Remove the directory if it exists
+    if os.path.exists(save_dir):
+        shutil.rmtree(save_dir)
+
+    # Create the directory
+    os.makedirs(save_dir)
+
+    for i in range(len(index_assignments)):
+        var_path = os.path.join(save_dir+"/clusters_indexes_" + str(i) + ".npy")
+        np_var = np.asarray(index_assignments[i],dtype=np.float32)
+        np.save(var_path,np_var)
+
+def save_clusters(clusters):
+    save_dir = "../data/clusters"
+    
+    # Remove the directory if it exists
+    if os.path.exists(save_dir):
+        shutil.rmtree(save_dir)
+
+    # Create the directory
+    os.makedirs(save_dir)
+
+    for i in range(len(clusters)):
+        var_path = os.path.join(save_dir+"/clusters_" + str(i) + ".npy")
+        np_var = np.asarray(clusters[i],dtype=np.float32)
+        np.save(var_path,np_var)
 
 def test_cluster():
     embeddings = np.random.rand(10, 2)
+    save_dir = "../data/"
+    test_path = os.path.join(save_dir+"test_embedding.npy")
+    np.save(test_path,embeddings)
+
     annoy_index = build_index(embeddings)
     distance_matrix = compute_distance_matrix(embeddings, annoy_index)
     assignments = cluster(distance_matrix)
-    clusters, means = get_clusters(embeddings, assignments)
+    clusters, means, index_assignments = get_clusters(embeddings, assignments)
+    save_index_assignments(index_assignments)
+    save_clusters(clusters)
+    print("Embeddings")
+    print(embeddings)
+    print("\n")
+
+    print("Clusters")
     print(clusters)
+    print("\n")
+
+    print("Means")
     print(means)
+    print("\n")
+
+    print("Index assignments")
+    print(index_assignments)
+    print("\n")
+
+def embeddings_cluster():
+    embeddings = load_embeddings()
+    annoy_index = build_index(embeddings)
+    distance_matrix = compute_distance_matrix(embeddings, annoy_index)
+    assignments = cluster(distance_matrix)
+    clusters, means, index_assignments = get_clusters(embeddings, assignments)
+    # print(len(index_assignments))
+    save_index_assignments(index_assignments)
+    save_clusters(clusters)
+    # print(means)
 
 
 def main():
     test_cluster()
+
+    # load_embeddings()
+    # embeddings_cluster()
 
 
 if __name__ == "__main__":

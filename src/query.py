@@ -1,65 +1,115 @@
 import torch
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+import os
 
+def load_query():
+    save_dir = "../data/"
+    query_tensors = np.load(save_dir+"/queries_test.npy")
+    query_np = np.asarray(query_tensors)
+    query_tensors_load = torch.from_numpy(query_np)
+    query_tensors_load = torch.squeeze(query_tensors_load)
+    print("query tensor",query_tensors_load.shape)
+    print(query_tensors_load[0].size())
 
-def find_top_K_vectors(clusters_of_images, query_vector, K):
-    """
-    This function takes in three inputs: clusters_of_images, query_vector, and K. It finds the mean vector of each cluster and gets the top K clusters based on cosine similarity. Then, from each of the top K clusters, it finds the vector in the cluster that is closest to the query vector. Finally, it returns a numpy array of those top K vectors.
+    return query_tensors_load
 
-    Args:
-        clusters_of_images (numpy.ndarray): A numpy array of dimensions (number_of_clusters, batch, embedding_size).
-        query_vector (numpy.ndarray): A numpy array of size embedding_size.
-        K (int): An integer representing the number of top clusters to return.
+def load_test_embedding():
+    save_dir = "../data/"
+    embed_tensors = np.load(save_dir+"/test_embedding.npy")
+    embed_np = np.asarray(embed_tensors)
+    embed_tensors_load = torch.from_numpy(embed_np)
+    embed_tensors_load = torch.squeeze(embed_tensors_load)
+    # print("embeddings tensor",embed_tensors_load.shape)
+    # print(embed_tensors_load[0].size())
 
-    Returns:
-        numpy.ndarray: A numpy array of dimensions (K, 512) containing the top K vectors.
-    """
-    num_clusters, batch_size, embedding_size = np.shape(clusters_of_images)
-    # Convert numpy arrays to PyTorch tensors
-    clusters_of_images = torch.from_numpy(clusters_of_images)
+    return embed_tensors_load
+
+def load_clusters(embedding_size):
+    save_dir = "../data/clusters/"
+
+    directory = os.fsencode(save_dir)
+
+    num_files = len(os.listdir(directory))
+    clusters = [None] * num_files
+
+    for i in range(num_files):
+        filename = save_dir+os.fsdecode("clusters_"+str(i)+".npy")
+        clusters_tensors = np.load(filename)
+        clusters_np = np.asarray(clusters_tensors)
+        clusters_np_reshaped = clusters_np.reshape(-1, embedding_size)
+        clusters_tensors_load = torch.from_numpy(clusters_np_reshaped)
+        clusters_tensors_load = torch.squeeze(clusters_tensors_load)
+        clusters[i] = clusters_tensors_load
+        print(filename)
+        print("clusters tensor",clusters_tensors_load)
+        
+    return np.asarray(clusters)
+
+def load_cluster_indexes():
+    save_dir = "../data/cluster_indexes/"
+
+    directory = os.fsencode(save_dir)
+
+    num_files = len(os.listdir(directory))
+    clusters_index = [None] * num_files
+
+    for i in range(num_files):
+        filename = save_dir+os.fsdecode("clusters_indexes_"+str(i)+".npy")
+        clusters_index_load = np.load(filename)
+        clusters_index_np = np.asarray(clusters_index_load)
+        clusters_index[i] = clusters_index_np
+        print(filename)
+        print("clusters index tensor",clusters_index_np)
+        
+    return clusters_index
+
+def find_top_K_vectors(clusters_of_images, index_assignments, query_vector, K, embedding_size):
+    # Convert query_vector to a PyTorch tensor
     query_vector = torch.from_numpy(query_vector)
 
     # Calculate cosine similarity between each cluster mean and the query vector
-    cluster_means = clusters_of_images.mean(
-        dim=1
-    )  # Calculate the mean for each cluster
+    cluster_means = torch.cat([cluster.mean(dim=0, keepdim=True) if len(cluster.shape) > 1 else cluster.unsqueeze(0) for cluster in clusters_of_images])
     query_vector_flat = query_vector.view(1, -1)  # Flatten the query vector
+
+    # Ensure both tensors have the same size at non-singleton dimension 1
+    if cluster_means.dim() == 1:
+        cluster_means = cluster_means.unsqueeze(0)
+    if query_vector_flat.dim() == 1:
+        query_vector_flat = query_vector_flat.unsqueeze(0)
+
     cos_sim = torch.nn.functional.cosine_similarity(
-        cluster_means.view(-1, embedding_size), query_vector_flat, dim=1
+        cluster_means, query_vector_flat, dim=1
     )
 
     # Get the indices of the top K clusters based on cosine similarity
     top_k_indices = cos_sim.topk(K).indices
 
-    # Add assertions to verify the top_k_indices
-    for i in range(K):
-        assert top_k_indices[i] == torch.argsort(cos_sim, descending=True)[i].item()
-
     # Find the vector in each of the top K clusters that is closest to the query vector
     top_k_vectors = []
+    top_k_vector_indices = []
     for i in range(K):
-        cluster_index = top_k_indices[i]
-
-        # Calculate cosine similarity between the cluster vectors and the query vector
-        cos_sim_cluster = torch.nn.functional.cosine_similarity(
-            clusters_of_images[cluster_index].view(-1, embedding_size),
-            query_vector_flat,
-            dim=1,
-        )
+        cluster_index = top_k_indices[i].item()  # Extract the cluster index from the tensor
 
         # Find the closest vector within the cluster
-        closest_vector_index = torch.argmax(cos_sim_cluster)
-        top_k_vectors.append(
-            clusters_of_images[cluster_index]
-            .view(-1, embedding_size)[closest_vector_index]
-            .numpy()
-        )
+        cluster_vectors = clusters_of_images[cluster_index]
+        cluster_indices = index_assignments[cluster_index]
+        if len(cluster_vectors.shape) > 1:
+            cos_sim_cluster = torch.nn.functional.cosine_similarity(
+                cluster_vectors, query_vector_flat, dim=1
+            )
+            closest_vector_index = torch.argmax(cos_sim_cluster).item()
+            top_k_vectors.append(cluster_vectors[closest_vector_index].numpy())
+            top_k_vector_indices.append(cluster_indices[closest_vector_index])
+        else:
+            # For one-dimensional tensors, use the tensor itself
+            top_k_vectors.append(cluster_vectors.numpy())
+            top_k_vector_indices.append(index_assignments[cluster_index])
 
     # Reshape the top K vectors to their original shape
-    top_k_vectors = np.array(top_k_vectors).reshape(K, embedding_size)
+    top_k_vectors = np.array(top_k_vectors).reshape(K, -1)
 
-    return top_k_vectors
+    return top_k_vectors, top_k_vector_indices
 
 # top K clusters and C vectors within those clusters
 def find_top_K_C_vectors(clusters_of_images, query_vector, K, C=1):
@@ -121,7 +171,7 @@ def find_top_K_C_vectors(clusters_of_images, query_vector, K, C=1):
 
 
 
-## SAMPLE CODE TO TEST
+# SAMPLE CODE TO TEST
 # helper function for testing
 def calculate_and_print_cosine_similarity(
     clusters_of_images, query_vector, K, top_k_vectors
@@ -175,29 +225,44 @@ def calculate_and_print_cosine_similarity(
 
 def testing():
     # Generate random data
-    number_of_clusters = 10
-    batch = 10
-    # channels = 5
-    # height = 48
-    # width = 64
-    embedding_size = 512
-    clusters_of_images = np.random.rand(
-        number_of_clusters, batch, embedding_size
-    )
+
+    embeddings = load_test_embedding()
+    embedding_size = 2
+    clusters_of_images = load_clusters(embedding_size) #SPECIFY EMBEDDING SIZE
+    cluster_index_assignments = load_cluster_indexes()
     query_vector = np.random.rand(embedding_size)
-    K = 5
+    K = len(cluster_index_assignments)
 
     print("TOP K RETRIEVAL")
-    top_k_vectors = find_top_K_vectors(clusters_of_images, query_vector, K)
+    print("CLUSTERS")
+    print(clusters_of_images)
+    print("\n")
+
+    print("CLUSTER INDEX ASSIGNMENTS")
+    print(cluster_index_assignments)
+    print("\n")
+
+    print("QUERY")
+    print(query_vector)
+    print("\n")
+    top_k_vectors, top_k_indices = find_top_K_vectors(clusters_of_images, cluster_index_assignments, query_vector, K, embedding_size)
     calculate_and_print_cosine_similarity(
         clusters_of_images, query_vector, K, top_k_vectors
     )
 
-    print("\nTOP K * C RETRIEVAL")
-    top_K_C_vectors = find_top_K_C_vectors(clusters_of_images, query_vector, K, 2)
-    calculate_and_print_cosine_similarity(
-        clusters_of_images, query_vector, K * 2, top_K_C_vectors
-    )
+    print("Top K Vectors")
+    print(top_k_vectors)
+    print("\n")
+
+    print("Top K Indices")
+    print(top_k_indices)
+    print("\n")
+
+    # print("\nTOP K * C RETRIEVAL")
+    # top_K_C_vectors = find_top_K_C_vectors(clusters_of_images, query_vector, K, 2)
+    # calculate_and_print_cosine_similarity(
+    #     clusters_of_images, query_vector, K * 2, top_K_C_vectors
+    # )
     # note here for calculate_and_print_cosine_similarity we pass in K*C. If we don't specify C for top_K_C_vectors, we should just pass in K for calculate_and_print_cosine_similarity
 
 
