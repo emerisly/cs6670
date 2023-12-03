@@ -122,8 +122,14 @@ def save_clusters(clusters):
 def test_cluster():
     embeddings = np.random.rand(10, 2)
     save_dir = "../data/"
-    test_path = os.path.join(save_dir+"test_embedding.npy")
-    np.save(test_path,embeddings)
+    test_path = os.path.join(save_dir+"/test_embedding.npy")
+
+    # Check if the file exists
+    if os.path.exists(test_path):
+        # If it exists, delete the file
+        os.remove(test_path)
+    
+    np.save(test_path, embeddings)
 
     annoy_index = build_index(embeddings)
     distance_matrix = compute_distance_matrix(embeddings, annoy_index)

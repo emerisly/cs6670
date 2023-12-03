@@ -9,8 +9,8 @@ def load_query():
     query_np = np.asarray(query_tensors)
     query_tensors_load = torch.from_numpy(query_np)
     query_tensors_load = torch.squeeze(query_tensors_load)
-    print("query tensor",query_tensors_load.shape)
-    print(query_tensors_load[0].size())
+    # print("query tensor",query_tensors_load.shape)
+    # print(query_tensors_load[0].size())
 
     return query_tensors_load
 
@@ -41,8 +41,8 @@ def load_clusters(embedding_size):
         clusters_tensors_load = torch.from_numpy(clusters_np_reshaped)
         clusters_tensors_load = torch.squeeze(clusters_tensors_load)
         clusters[i] = clusters_tensors_load
-        print(filename)
-        print("clusters tensor",clusters_tensors_load)
+        # print(filename)
+        # print("clusters tensor",clusters_tensors_load)
         
     return np.asarray(clusters)
 
@@ -59,8 +59,8 @@ def load_cluster_indexes():
         clusters_index_load = np.load(filename)
         clusters_index_np = np.asarray(clusters_index_load)
         clusters_index[i] = clusters_index_np
-        print(filename)
-        print("clusters index tensor",clusters_index_np)
+        # print(filename)
+        # print("clusters index tensor",clusters_index_np)
         
     return clusters_index
 
