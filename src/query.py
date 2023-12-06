@@ -2,17 +2,30 @@ import torch
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import os
+import shutil
 
-def load_query():
+def load_queries(filename):
     save_dir = "../data/"
-    query_tensors = np.load(save_dir+"/queries_test.npy")
-    query_np = np.asarray(query_tensors)
-    query_tensors_load = torch.from_numpy(query_np)
-    query_tensors_load = torch.squeeze(query_tensors_load)
-    # print("query tensor",query_tensors_load.shape)
+    queries_tensors = np.load(save_dir+"/" +filename+".npy")
+    queries_np = np.asarray(queries_tensors)
+    queries_tensors_load = torch.from_numpy(queries_np)
+    queries_tensors_load = torch.squeeze(queries_tensors_load)
+    print("queries tensor",queries_tensors_load.shape)
     # print(query_tensors_load[0].size())
 
-    return query_tensors_load
+    return queries_tensors_load
+
+
+def load_embedding():
+    save_dir = "../data/"
+    embed_tensors = np.load(save_dir+"/images.npy")
+    embed_np = np.asarray(embed_tensors)
+    embed_tensors_load = torch.from_numpy(embed_np)
+    embed_tensors_load = torch.squeeze(embed_tensors_load)
+    # print("embeddings tensor",embed_tensors_load.shape)
+    # print(embed_tensors_load[0].size())
+
+    return embed_tensors_load
 
 def load_test_embedding():
     save_dir = "../data/"
@@ -65,8 +78,8 @@ def load_cluster_indexes():
     return clusters_index
 
 def find_top_K_vectors(clusters_of_images, index_assignments, query_vector, K, embedding_size):
-    # Convert query_vector to a PyTorch tensor
-    query_vector = torch.from_numpy(query_vector)
+    # # Convert query_vector to a PyTorch tensor
+    # query_vector = torch.from_numpy(query_vector)
 
     # Calculate cosine similarity between each cluster mean and the query vector
     cluster_means = torch.cat([cluster.mean(dim=0, keepdim=True) if len(cluster.shape) > 1 else cluster.unsqueeze(0) for cluster in clusters_of_images])
@@ -222,6 +235,27 @@ def calculate_and_print_cosine_similarity(
     )
     print(similarities_all_sorted)
 
+def save_k_indices(filename, i, indices):
+    save_dir = "../data/"+filename
+    
+    # Remove the directory if it exists
+    if i == 0 or os.path.exists(save_dir):
+        shutil.rmtree(save_dir)
+
+        # Create the directory
+        os.makedirs(save_dir)
+    
+    var_path = os.path.join(save_dir+"/top_k_query" + str(i) + ".npy")
+    print(var_path)
+    np_var = np.asarray(indices[i],dtype=np.float32)
+    np.save(var_path,np_var)
+
+def save_final_output(filename, output):
+    save_dir = "../data/"
+
+    var_path = os.path.join(save_dir+"/" +filename+ "_top_k_indices.npy")
+    np_var = np.asarray(output,dtype=np.float32)
+    np.save(var_path,np_var)
 
 def testing():
     # Generate random data
@@ -265,9 +299,44 @@ def testing():
     # )
     # note here for calculate_and_print_cosine_similarity we pass in K*C. If we don't specify C for top_K_C_vectors, we should just pass in K for calculate_and_print_cosine_similarity
 
+def actual():
+    query_file_name = "queries_test"
+    embeddings = load_embedding()
+    embedding_size = 512
+    clusters_of_images = load_clusters(embedding_size) #SPECIFY EMBEDDING SIZE
+    cluster_index_assignments = load_cluster_indexes()
+    queries = load_queries(query_file_name)
+    K = len(cluster_index_assignments)
+
+    print("TOP K RETRIEVAL")
+    
+    # Initialize an empty list to store the arrays
+    output = []
+
+    # Create and append 1D arrays to the list
+    for i in range(len(queries)):
+        top_k_vectors, top_k_indices = find_top_K_vectors(clusters_of_images, cluster_index_assignments, queries[i], K, embedding_size)
+        output.append(top_k_indices)
+
+    # Use np.vstack to stack the arrays vertically
+    stacked_array = np.vstack(output)
+
+    print(np.shape(stacked_array))
+
+    save_final_output(query_file_name, stacked_array)
+
+    # print("Top K Vectors")
+    # print(top_k_vectors)
+    # print("\n")
+
+    print("Top K Indices")
+    # print(top_k_indices)
+    print("\n")
+
 
 def main():
-    testing()
+    # testing()
+    actual()
 
 
 if __name__ == "__main__":
