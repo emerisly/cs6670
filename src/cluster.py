@@ -166,10 +166,10 @@ def embeddings_cluster():
 
 
 def main():
-    test_cluster()
+    # test_cluster()
 
-    # load_embeddings()
-    # embeddings_cluster()
+    load_embeddings()
+    embeddings_cluster()
 
 
 if __name__ == "__main__":
